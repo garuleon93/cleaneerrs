@@ -1,4 +1,4 @@
-*.db>> .gitignore
-*.sqlite3>> .gitignore
-__pycache__
+*.db
+*.sqlite3
+__pycache__/
 .env
