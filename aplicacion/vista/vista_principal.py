@@ -19,14 +19,14 @@ class Vista_Principal:
             if tabs.selected_index==2:
                 tab3.content=vista_informes.obtener_pantalla_informes()
             if tabs.selected_index == 3:
-                tab4.content = vista_localidades.obtener_pantalla_localidades()    
+                tab4.content = vista_localidades.obtener_pantalla_localidades(self.page)    
             tabs.update()
 
         # Definir tabs con contenido inicial
         tab1 = ft.Tab(text="Contratistas",icon=ft.icons.PERSON,content=vista_contratistas.obtener_pantalla_contratistas())
         tab2 = ft.Tab(text="Facturas",icon=ft.icons.DOCUMENT_SCANNER,content=vista_facturas.obtener_pantalla_facturas())
         tab3 = ft.Tab(text="Informes",icon=ft.icons.SCHEDULE,content=vista_informes.obtener_pantalla_informes())
-        tab4 = ft.Tab(text="Localidades",icon=ft.icons.LOCATION_CITY,content=vista_localidades.obtener_pantalla_localidades())
+        tab4 = ft.Tab(text="Localidades",icon=ft.icons.LOCATION_CITY,content=vista_localidades.obtener_pantalla_localidades(self.page))
 
         # Tabs principal
         tabs = ft.Tabs(
