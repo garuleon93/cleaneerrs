@@ -1,5 +1,6 @@
 from docxtpl import DocxTemplate
 from datetime import datetime
+#from aplicacion.database.config import crear_conexion
 import tkinter as tk
 from tkinter import filedialog
 from num2words import num2words
@@ -10,6 +11,12 @@ import openpyxl
 import math
 import calendar
 import win32com.client
+#corrección de ejecución, hay que corregir este parche
+try:
+    from aplicacion.database.config import crear_conexion
+except ModuleNotFoundError:
+    # cuando se ejecuta como script (python aplicacion/app.py)
+    from database.config import crear_conexion
 
 
 
@@ -183,6 +190,22 @@ class Generar_Docs:
         documento.render(contenido)
         return documento
 
+    def _leer_localidades_contratista(self, id_contratista: int):
+        """
+        Devuelve: (provincia, canton, localidad, ubicacion, metros, p_unitario, p_total)
+        de la tabla 'localidades' para el contratista dado.
+        """
+        with crear_conexion() as con:
+            cur = con.execute(
+                """
+                SELECT provincia, canton, localidad, ubicacion, metros, p_unitario, p_total
+                FROM localidades
+                WHERE id_contratista = ?
+                ORDER BY provincia, canton, localidad, ubicacion
+                """,
+                (id_contratista,),
+            )
+            return cur.fetchall()
 
 
 
@@ -335,10 +358,10 @@ class Generar_Docs:
 
         hojaPpago["B21"]="Planilla mensual "+self.factura[4]+" por limpieza de edificios"
         hojaPpago["E21"] = self.factura[7]                         #valor planillado                      
-        hojaPpago["E31"] = self.factura[7]                          #HAY QUE SUMAR LAS LOCALIDADES 
-        hojaPpago["G33"] = self.factura[7]                        #total planillado
-        hojaPpago["G34"] = math.trunc((self.factura[7]*0.15)*100)/100      #IVA
-        hojaPpago["G35"]=math.trunc((float(hojaPpago["G33"].value)+float(hojaPpago["G34"].value))*100)/100          #Total factura
+        hojaPpago["E34"] = self.factura[7]                          #HAY QUE SUMAR LAS LOCALIDADES 
+        hojaPpago["G36"] = self.factura[7]                        #total planillado
+        hojaPpago["G37"] = math.trunc((self.factura[7]*0.15)*100)/100      #IVA
+        hojaPpago["G38"]=math.trunc((float(hojaPpago["G36"].value)+float(hojaPpago["G37"].value))*100)/100          #Total factura
 
         #-----------------DESCUENTOS --------------------
         # --CAmbio esta linea de codigo--hojaPpago["F38"]=math.trunc((float(hojaPpago["E21"].value)*0.1)*100)/100
@@ -353,19 +376,38 @@ class Generar_Docs:
                 porcentaje_anticipo = 0.0
         except (TypeError, ValueError):
             porcentaje_anticipo = 0.0
-        hojaPpago["F38"] = math.trunc((float(hojaPpago["E21"].value) * porcentaje_anticipo) * 100) / 100                       #Anticipo 10%
-        hojaPpago["F39"]=math.trunc((float(hojaPpago["G33"].value)*0.0275)*100)/100                    #Impuesto a la renta 2.75%
-        hojaPpago["F40"]=math.trunc((float(hojaPpago["G34"].value)*0.7)*100)/100                      #Retencion al Iva 70%
-        hojaPpago["F41"]=0.0  #Multas
+        hojaPpago["F41"] = math.trunc((float(hojaPpago["E21"].value) * porcentaje_anticipo) * 100) / 100                       #Anticipo 10%
+        hojaPpago["F42"]=math.trunc((float(hojaPpago["G36"].value)*0.0275)*100)/100                    #Impuesto a la renta 2.75%
+        hojaPpago["F43"]=math.trunc((float(hojaPpago["G37"].value)*0.7)*100)/100                      #Retencion al Iva 70%
+        hojaPpago["F44"]=0.0  #Multas
 
-        hojaPpago["G43"]=math.trunc((float(hojaPpago["F38"].value)+float(hojaPpago["F39"].value)+float(hojaPpago["F40"].value)+float(hojaPpago["F41"].value))*100)/100 #Total descuentos
+        hojaPpago["G46"]=math.trunc((float(hojaPpago["F41"].value)+float(hojaPpago["F42"].value)+float(hojaPpago["F43"].value)+float(hojaPpago["F44"].value))*100)/100 #Total descuentos
         #Valor liquido
-        hojaPpago["G47"]=math.trunc((float(hojaPpago["G35"].value)-float(hojaPpago["G43"].value))*100)/100
+        hojaPpago["G50"]=math.trunc((float(hojaPpago["G38"].value)-float(hojaPpago["G46"].value))*100)/100
         #descripcion
-        hojaPpago["B50"]="Son: "+ self.cifra_a_texto(math.trunc(float(hojaPpago["G47"].value)*100)/100)
+        hojaPpago["B53"]="Son: "+ self.cifra_a_texto(math.trunc(float(hojaPpago["G50"].value)*100)/100)
         #observaciones
-        hojaPpago["B53"]="Observaciones: Se adjunta documentación de soporte de factura No. "+self.factura[2]+" e informe de Fiscalización de fecha "+datetime.today().strftime("%d/%m/%Y")+" correspondiente a la planilla Nro. "+self.obtener_planilla()
+        hojaPpago["B56"]="Observaciones: Se adjunta documentación de soporte de factura No. "+self.factura[2]+" e informe de Fiscalización de fecha "+datetime.today().strftime("%d/%m/%Y")+" correspondiente a la planilla Nro. "+self.obtener_planilla()
         
+        #------------------------------------------------------------------------------
+        # Localidaddes  
+        id_contratista = int(self.contratista[0])
+        localidades = self._leer_localidades_contratista(id_contratista)
+
+        fila_inicio = 22
+        fila = fila_inicio
+        total_localidades = 0.0
+
+        for (prov, cant, loc, ubi, metros, p_unit, p_total) in localidades:
+            # Columna C: "Provincia / Cantón / Localidad"
+            #hojaPpago[f"C{fila}"] = f"{(prov or '').strip()} / {(cant or '').strip()} / {(loc or '').strip()}"
+            # Columna D: Ubicación
+            hojaPpago[f"C{fila}"] = (ubi or "")
+            # Columna E: P.Total de la fila
+            valor = float(p_total or 0)
+            hojaPpago[f"D{fila}"] = valor
+            total_localidades += valor
+            fila += 1
         #----------------------------------------------------------------------------
               #  HOJA ESTADO
         hojaEstado = wb["Estado"]
@@ -390,7 +432,7 @@ class Generar_Docs:
             hojaEstado["F25"]=math.trunc((0*100))/100                            #valor ejecutado en el estado anterior
             hojaEstado["G26"]=self.factura[7]              #valor de la presente planilla
             hojaEstado["G27"]=math.trunc((self.factura[7]*0.15)*100)/100   #iva 15%
-            hojaEstado["G28"]=math.trunc((float(hojaPpago["G33"].value)+float(hojaPpago["G34"].value))*100)/100 #valor total
+            hojaEstado["G28"]=math.trunc((float(hojaPpago["G36"].value)+float(hojaPpago["G37"].value))*100)/100 #valor total
             hojaEstado["F31"]=hojaPpago["F38"].value   #retenido
             hojaEstado["F34"]=hojaPpago["F38"].value   #anticipo total
             hojaEstado["F35"]=hojaPpago["F39"].value   #impuesto a la renta
@@ -414,15 +456,15 @@ class Generar_Docs:
             hojaEstado["F25"]=self.obtener_total_facturas_anteriores()         #valor ejecutado en el estado anterior
             hojaEstado["G26"]=self.factura[7]              #valor de la presente planilla
             hojaEstado["G27"]=math.trunc((self.factura[7]*0.15)*100)/100   #iva 15%
-            hojaEstado["G28"]=math.trunc((float(hojaPpago["G33"].value)+float(hojaPpago["G34"].value))*100)/100 #valor total
+            hojaEstado["G28"]=math.trunc((float(hojaPpago["G36"].value)+float(hojaPpago["G37"].value))*100)/100 #valor total
             #amortizacion de anticipo
             hojaEstado["F31"]=math.trunc(float(hojaPpago["E21"].value) * porcentaje_anticipo * 100) / 100   #retenido
-            hojaEstado["F34"]=hojaPpago["F38"].value   #anticipo total
-            hojaEstado["F35"]=hojaPpago["F39"].value   #impuesto a la renta
-            hojaEstado["F36"]=hojaPpago["F40"].value    #retencion iva
-            hojaEstado["F37"]=hojaPpago["F41"].value   #multas
-            hojaEstado["G39"]=hojaPpago["G43"].value    #total retencones
-            hojaEstado["G40"]=hojaPpago["G47"].value    #valor liquido
+            hojaEstado["F34"]=hojaPpago["F41"].value   #anticipo total
+            hojaEstado["F35"]=hojaPpago["F42"].value   #impuesto a la renta
+            hojaEstado["F36"]=hojaPpago["F43"].value    #retencion iva
+            hojaEstado["F37"]=hojaPpago["F44"].value   #multas
+            hojaEstado["G39"]=hojaPpago["G45"].value    #total retencones
+            hojaEstado["G40"]=hojaPpago["G50"].value    #valor liquido
             #cuadro de devoluciones danticipo_entregadoe anticipos
             # corregir porque los anticipos varian de uno a otro esto es urgente arreglar
             nro_planilla = int(self.obtener_planilla())  # transformar numero de planilla de str a floar
